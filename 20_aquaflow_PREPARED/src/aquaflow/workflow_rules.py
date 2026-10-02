@@ -7,6 +7,7 @@ from typing import Any
 
 from .booster.failover import Unit, choose as choose_boosters
 from .chemicals.inventory import Lot, active_mass
+from .chemicals.receiving import Shipment, Tank, screen
 from .flush.plan import Hydrant, waves
 from .incidents.escalation import Incident, Rule, overdue
 from .lab.custody import Event, validate as validate_custody
@@ -102,6 +103,26 @@ def evaluate(name: str, p: dict[str, Any]) -> dict[str, Any]:
         rows = [Lot(str(x["id"]), Decimal(str(x["gross_kg"])), Decimal(str(x["concentration"])), bool(x.get("released", True))) for x in p["lots"]]
         result = active_mass(rows)
         return {"decision": "release" if result > 0 else "hold", "value": result, "evidence": {"lots": len(rows)}}
+    if name == "chemical_receiving":
+        s = p["shipment"]
+        shipment = Shipment(
+            str(s.get("arrival_ref", "")),
+            str(s.get("chemical", "")),
+            str(s.get("lot", "")),
+            str(s.get("tank", "")),
+            Decimal(str(s["gross_kg"])) if s.get("gross_kg") is not None else None,
+            Decimal(str(s["concentration"])) if s.get("concentration") is not None else None,
+        )
+        tanks = {str(t["id"]): Tank(str(t["id"]), frozenset(t.get("allowed", ()))) for t in p["tanks"]}
+        contents = {str(k): set(v) for k, v in p.get("contents", {}).items()}
+        pairs = {frozenset(x) for x in p.get("incompatible", ())}
+        specs = {str(k): Decimal(str(v)) for k, v in p.get("specs", {}).items()}
+        issues = screen(shipment, tanks, contents, pairs, specs)
+        duplicate = bool(shipment.arrival_ref) and shipment.arrival_ref in set(p.get("seen_refs", ()))
+        decision = "duplicate" if duplicate else ("stage" if issues else "receive")
+        gross = shipment.gross_kg if shipment.gross_kg is not None else Decimal(0)
+        effective = gross * shipment.concentration if shipment.concentration is not None else Decimal(0)
+        return {"decision": decision, "value": sorted(issues), "evidence": {"gross_kg": gross, "effective_kg": effective, "issues": len(issues)}}
     if name == "confined_permit":
         x = p["permit"]
         permit = Permit(_dt(x["starts"]), _dt(x["ends"]), _dt(x["gas_test"]), str(x["attendant"]), str(x["entrant"]), str(x["rescue"]))

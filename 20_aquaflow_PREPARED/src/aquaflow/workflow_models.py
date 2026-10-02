@@ -34,6 +34,7 @@ _REQUIRED: dict[str, tuple[str, ...]] = {
     "leak_localization": ("signals",),
     "flush_waves": ("hydrants", "required", "max_parallel"),
     "chemical_active_mass": ("lots",),
+    "chemical_receiving": ("shipment", "tanks"),
     "confined_permit": ("permit", "at", "max_age"),
     "outage_impact": ("customers", "nodes"),
     "incident_escalation": ("incident", "rules", "now"),
